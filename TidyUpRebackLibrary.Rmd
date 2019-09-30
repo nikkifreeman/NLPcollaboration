@@ -1,0 +1,109 @@
+---
+title: "Data preparation for Reback text msg library"
+author: "Nikki Freeman"
+output: html_notebook
+---
+
+I am following the tidy text format suggested in _Text Mining with R: A Tidy Approach_ by Julia Silge and David Robinson (https://www.tidytextmining.com/).
+
+Here are the key ideas related to tidy text
+
+  * The tidy text format is described as *a table with one-token-per-row*.
+  * A *token* is a meaningful unit of text, such as a word, that we are interested in using.
+  * *Tokenization* is the process of splitting text into tokens.
+  
+Other data structures (in contrast to tidy text)
+
+  * String
+  * Corpus: Raw strings annotated with additional metadata and details
+  * Document-term matrix: a sparse matrix describing a collection (i.e., a corpus) of documents with one row for each document and one column for each term. The value in the matrix is typically word count or tf-idf.
+
+## Tokenization code example
+Example code for tokenization
+```{r}
+library(tidyverse)
+library(tidytext)
+
+# Raw text
+text <- c("Because I could not stop for Death -",
+          "He kindly stopped for me -",
+          "The Carriage held but just Ourselves -",
+          "and Immortality")
+
+text
+
+#Put the raw text into a data frame
+text_df <- tibble(line = 1:4, text = text)
+
+text_df
+
+# Break up into tokens
+text_df %>% unnest_tokens(word, text)
+```
+
+Observe the following about the `unnest_tokens` function:
+
+  * Columns such as the line number are retained
+  * Punctuation has been stripped
+  * Words are all lower case (this can be controlled)
+
+We can remove stop words
+```{r}
+data(stop_words)
+stop_words
+
+# Remove the stop words
+text_df %>% unnest_tokens(word, text) %>%
+  anti_join(stop_words, by = "word")
+
+# Count the word frequencies
+text_df %>% unnest_tokens(word, text) %>%
+  count(word, sort = TRUE)
+```
+
+## Preparation of the Reback text message library
+
+Load the library
+```{r}
+rm(list = ls())
+library(readxl)
+
+# Load the text message library
+# Note that this library is modified to give the Pre and Post Messages unique identifiers
+txtMsgLibrary <- readxl::read_xlsx("C:/Users/nlbfr/Dropbox/UNC/Causal NLP/Reback_TxtLibrary/Reback_Project Tech Support Text Message Library_NF.xlsx", 
+                  sheet = "Library", skip = 24, col_names = c("msgID", "textMsg"))
+
+#
+
+# Remove the blank lines
+## Number of lines expected to be blanks
+table(is.na(txtMsgLibrary$textMsg))
+# Filter out the blank lines
+txtMsgLibrary <- txtMsgLibrary %>% filter(!is.na(textMsg))
+# Sanity check
+dim(txtMsgLibrary)
+```
+
+## Tidy up the text messages
+```{r}
+library(tidyverse)
+library(tidytext)
+
+# Create tidy text and remove stop words
+tidyTxt <- txtMsgLibrary %>% unnest_tokens(word, textMsg) %>%
+  anti_join(stop_words, by = "word")
+
+# Create the Document-term matrix
+## Creates a sparse matrix
+## txtDTMsparse <- tidyTxt %>% count(msgID, word) %>% cast_dtm(term = word, document = msgID, value = n)
+## The Gibbs sampler was made for a non-sparse matrix
+txtDTM <- tidyTxt %>%
+  group_by(msgID) %>%
+  count(word) %>%
+  spread(word, n)
+txtDTM[is.na(txtDTM)] <-0
+txtDTM
+
+# Save the matrix for use with the sampler
+write_csv(txtDTM, path = "C:/Users/nlbfr/Dropbox/UNC/Causal NLP/Reback_TxtLibrary/RebackDTM.csv")
+```
