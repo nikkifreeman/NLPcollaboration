@@ -1,0 +1,111 @@
+---
+title: "LDA on Reback Library"
+output: html_notebook
+---
+
+Load the required packages
+```{r}
+library(tidyverse)
+library(mvtnorm)
+library(truncnorm)
+library(readxl)
+# library(nnet)
+library(Rcpp)
+library(RcppArmadillo)
+```
+
+Load the required scripts
+```{r}
+sourceCpp("LDAscripts/calculateProbs2.cpp")
+```
+
+Load the data
+```{r, results = "hide"}
+txtDTM <- read_csv("C:/Users/nlbfr/Dropbox/UNC/Causal NLP/Reback_TxtLibrary/RebackDTM.csv")
+str(txtDTM)
+```
+
+Make analysis matrix
+```{r}
+# W is the document word matrix (without msg identifier)
+W <- txtDTM %>% select(-msgID)
+W <- as.matrix(W)
+
+```
+
+## Fourth attempt (with Rcpp)
+
+Supervised LDA using Gibbs sampling
+```{r, eval = FALSE}
+sourceCpp("M:/Analysis/scripts/calculateZ_bar.cpp")
+sourceCpp("M:/Analysis/scripts/calculateSigma_eta.cpp")
+sourceCpp("M:/Analysis/scripts/calculateMu_eta.cpp")
+sourceCpp("M:/Analysis/scripts/calculateProbs2.cpp")
+```
+
+```{r}
+# Set the seed
+set.seed(100)   
+
+# Counts
+K <- 5
+M <- dim(W)[1]
+N <- dim(W)[2]
+
+# Initial values for the Z matrix
+Z <- matrix(sample(1:K, size = M*N, replace = TRUE), nrow = M, ncol = N)
+Z[W == 0] <- NA
+
+# States
+states <- 1:K
+
+# Hyperparameters
+alpha <- rep(1, K)
+delta <- rep(1, N)
+
+# Number of samples
+L <- 100
+
+# Place to put samples
+Z_chain <- vector("list", L+1)
+Z_chain[[1]] <- Z
+
+startTime <- Sys.time() 
+
+# Gibb sampling
+for(l in 1:L){
+  
+  # Update the Z_chain
+  Z_chain[[l + 1]] <- Z_chain[[l]]
+  
+  for(m in 1:M){
+    for(n in 1:N){
+      
+      if(W[m, n] == 0){
+        next()
+      }
+      
+      probs <- calculate_prob_vec(Z = Z_chain[[l + 1]], W = W, m = m, n = n, K = K,
+                                 alpha = alpha, delta = delta)
+      
+      
+      Z_chain[[l + 1]][m, n] <- sample(states, size = 1, prob = probs)
+      
+    }
+  }
+
+  
+
+  
+}
+
+totTime <- Sys.time() - startTime
+totTime
+
+
+fileName <- paste0("C:/Users/nlbfr/Dropbox/UNC/Causal NLP/Reback_LDAresults/LDA", K, ".R")
+save(Z_chain, txtDTM, W, alpha, delta, K, M, N, L, file = fileName)
+
+
+
+```
