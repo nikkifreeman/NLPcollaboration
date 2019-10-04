@@ -33,9 +33,7 @@ W <- as.matrix(W)
 
 ```
 
-## Fourth attempt (with Rcpp)
-
-Supervised LDA using Gibbs sampling
+## Supervised LDA using Gibbs sampling
 ```{r, eval = FALSE}
 sourceCpp("M:/Analysis/scripts/calculateZ_bar.cpp")
 sourceCpp("M:/Analysis/scripts/calculateSigma_eta.cpp")
@@ -48,7 +46,7 @@ sourceCpp("M:/Analysis/scripts/calculateProbs2.cpp")
 set.seed(100)   
 
 # Counts
-K <- 5
+K <- 10
 M <- dim(W)[1]
 N <- dim(W)[2]
 
@@ -94,7 +92,7 @@ for(l in 1:L){
     }
   }
 
-  
+   
 
   
 }
@@ -109,3 +107,9 @@ save(Z_chain, txtDTM, W, alpha, delta, K, M, N, L, file = fileName)
 
 
 ```
+
+## Reproducibility and metrics
+K | Seed | L | Time
+--|------|---|------
+5 | 100 | 100| 4.309 hours
+10| 

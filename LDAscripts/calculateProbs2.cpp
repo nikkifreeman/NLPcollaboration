@@ -68,6 +68,7 @@ NumericVector calculate_prob_vec(NumericMatrix Z, NumericMatrix W, int m, int n,
 
 
 
+
   
    
   
