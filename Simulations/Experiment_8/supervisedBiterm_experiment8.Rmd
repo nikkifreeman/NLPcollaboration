@@ -1,0 +1,221 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+Things to keep track of:
+
+  * Number of participants in each stage
+  * Number of times that the outcome is collected
+  * Number of texts:outcomes collected
+  * Size of corpus:number of outcomes for each document
+
+```{r, echo = FALSE, results = 'hide', message = FALSE, warning = FALSE, include = FALSE}
+library(lda)
+library(tidyverse)
+```
+  
+## Experiment 1
+
+Quick off the shelf experiment of a simple two-stage trial design. 
+
+```{r}
+setwd("/Users/Nikki/Dropbox/UNC/Causal NLP/")
+rebackDTM <- read_csv("Reback_TxtLibrary/RebackDTM.csv")
+
+# A little pre-processing
+rebackDTM <- 
+  rebackDTM %>% select(-c("________", "_________", "0880", "1", "10pm", "12", 
+                        "1600", "1625", "1990", "201", "213", "2400", "262",
+                        "3", "30", "323", "3393", "4343", "463", "483", "4x",
+                        "5", "50", "5366", "5395", "5880", "6", "6100", "626",
+                        "653", "660", "6691", "7001", "758", "7669", "769",
+                        "800", "860", "877", "9.95", "933", "936", "993", 
+                        "aa", "www.friendsgettingoff.org")) %>%
+  mutate(ass = ass + asses, 
+         blow = blow + blows, 
+         bareback = bareback + barebacking,
+         beat = beat + beats,
+         bootybump = bootybump + bootybumps,
+         bottom = bottom + bottomed + bottoming + bottoms,
+         boundary = boundary + boundaries,
+         boy = boy + boys,
+         brush = brush + brushed,
+         bump = bump + bumps,
+         bug = bug + bugs,
+         bring = bring + brings,
+         chance = chance + chances,
+         choice = choice + choices,
+         clean = clean + cleaner + cleaning,
+         commit = commit + commitment,
+         condom = condom + condoms + condomize,
+         cruise = cruise + cruising, 
+         day = day + daily,
+         disclose = disclose + disclosure,
+         dose = dose + doses + dosing,
+         easy = easy + easier,
+         feel = feel + feeling,
+         hepatitis = hep + hepatitis,
+         live = live + living,
+         low = low + lower + lowered + lowers,
+         med = med + meds,
+         meth = meth + methed,
+         party = party + partying,
+         partner = partner + partners,
+         pharmacy = pharmacy + pharmacist,
+         positive = positive + poz,
+         protect = protect + protecting + protection,
+         safe = safe + safer,
+         speed = speed + speeds,
+         sex = sex + sexy,
+         skip = skip + skipping,
+         std = std + stds,
+         strong = strong + stronger,
+         treat = treat + treatment) %>%
+  select(-c(asses, blows, barebacking, beats, bootybumps,
+            brushed, bottomed, bottoming, bottoms, boundaries, boys,
+           bumps, bugs, chances, brings, choices, cleaner,
+           cleaning, commitment, condoms, condomize, cruising, 
+           daily, doses,
+           dosing, disclosure, easier, hep, living, methed,
+           meds, partying, partners, pharmacist, safer, speeds, sexy,
+           lower, lowered, lowers, poz, feeling,
+           protecting, protection, skipping, stronger,
+           stds, treatment))
+
+# Get a vector of the vocabulary
+vocab <- rebackDTM %>% filter(str_detect(msgID, "^A|^B")) %>%
+  summarise_at(.vars = vars(abbey:worth), sum) %>%
+  pivot_longer(names_to = "word", values_to = "count", cols = abbey:worth) %>%
+  filter(count > 0) %>%
+  select(word) %>%
+  unlist()
+vocab <- unname(vocab)
+vocabDF <- data.frame(word = vocab, wordNum = seq_along(vocab))
+
+# Keep only the vocab in the text being analyzed
+# Last bit of pre-processing
+dtm <- rebackDTM %>% filter(str_detect(msgID, "^A|^B")) %>%
+  select(msgID, all_of(vocab)) %>%
+  select(-`doesn’t`)%>%
+  select(-`don’t`)
+
+
+
+documents <- dtm %>%
+  pivot_longer(cols = add:worth, names_to = "word", values_to = "count") %>%
+  left_join(vocabDF, by = "word") %>%
+  mutate(wordNum = wordNum - 1) %>%
+  select(-word) %>%
+  select(msgID, wordNum, count) %>%
+  filter(count > 0) %>%
+  group_by(msgID) %>%
+  nest() %>%
+  mutate(document_matrix = map(data, as.matrix)) %>%
+  mutate(document_matrix = map(document_matrix, t)) %>%
+  mutate(document_matrix = map(document_matrix, unname))
+
+outcomes <- documents %>% select(msgID) %>%
+  distinct() %>%
+  rowwise() %>%
+  mutate(Y = if_else(str_detect(msgID, "^A"), rnorm(1, 5, 2), rnorm(1, 0, 2)))
+
+
+slda.em(documents = documents$document_matrix, 
+        K = 2, 
+        vocab = vocab,
+        num.e.iterations = 10, 
+        num.m.iterations = 4,
+        alpha = 1.0, eta = 0.1,
+        annotations = outcomes$Y, variance = 1, 
+        logistic = FALSE,
+        params = c(1, 1))
+```
+
+```{r}
+## Use the political blogs data set.
+data(poliblog.documents)
+
+data(poliblog.vocab)
+
+data(poliblog.ratings)
+
+num.topics <- 10
+
+## Divide in half
+trainingSet <- sample(x = 1:length(poliblog.documents), size = length(poliblog.documents)/2-.5)
+testSet <- 1:length(poliblog.documents)
+testSet <- testSet[!(1:length(poliblog.documents) %in% trainingSet)]
+
+## Initialize the params
+params <- sample(c(-1, 1), num.topics, replace=TRUE)
+
+result <- slda.em(documents=poliblog.documents[trainingSet],
+                   K=num.topics,
+                   vocab=poliblog.vocab,
+                   num.e.iterations=10,
+                   num.m.iterations=4,
+                   alpha=1.0, eta=0.1,
+                   poliblog.ratings[trainingSet] / 100,
+                   params,
+                   variance=0.25,
+                   lambda=1.0,
+                   logistic=FALSE,
+                   method="sLDA")
+
+
+
+## Make a pretty picture.
+require("ggplot2")
+
+Topics <- apply(top.topic.words(result$topics, 5, by.score=TRUE),
+                2, paste, collapse=" ")
+
+coefs <- data.frame(coef(summary(result$model)))
+
+theme_set(theme_bw())
+
+coefs <- cbind(coefs, Topics=factor(Topics, Topics[order(coefs$Estimate)]))
+
+coefs <- coefs[order(coefs$Estimate),]
+
+qplot(Topics, Estimate, colour=Estimate, size=abs(t.value), data=coefs) +
+  geom_errorbar(width=0.5, aes(ymin=Estimate-Std..Error,
+                               ymax=Estimate+Std..Error)) + coord_flip()
+
+predictions <- slda.predict(poliblog.documents,
+                             result$topics,
+                             result$model,
+                             alpha = 1.0,
+                             eta=0.1)
+
+qplot(predictions,
+       fill=factor(poliblog.ratings),
+       xlab = "predicted rating",
+       ylab = "density",
+       alpha=I(0.5),
+       geom="density") +
+   geom_vline(aes(xintercept=0)) +
+   theme(legend.position = "none")
+
+# > predicted.docsums <- slda.predict.docsums(poliblog.documents,
+# +                                           result$topics, 
+# +                                           alpha = 1.0,
+# +                                           eta=0.1)
+# 
+# > predicted.proportions <- t(predicted.docsums) / colSums(predicted.docsums)
+# 
+qplot(`Topic 1`, `Topic 2`,
+      data = structure(data.frame(predicted.proportions),
+                       names = paste("Topic", 1:10)),
+      size = `Topic 3`)
+
+predictedValues <- unlist(map(result$assignments, function(assignment){return(sum(assignment == 2)/length(assignment))})) 
+topDocs <- which(predictedValues > 0.25)
+mean(poliblog.ratings[trainingSet[topDocs]]/100)
+mean(poliblog.ratings[trainingSet]/100)
+```
+
+```{r}
+rebackDTM
+```

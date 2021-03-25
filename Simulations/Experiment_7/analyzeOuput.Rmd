@@ -1,0 +1,71 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+Experiement 7 version 1
+
+  * K = 3
+  * L = 50
+  * A texts ~ N(1, 1), all others ~ N(0, 1)
+  
+```{r}
+library(tidyverse)
+topicCounts1 <- read_csv("Exper7v1/bitermTopicCount.csv")
+txtBiterm1 <- read_csv("Exper7v1/txtBiterm_df.csv")
+
+getTxtsAndTopics <- function(topicCounts, txtBiterm){
+  txtsAndTopics <- left_join(txtBiterm, topicCounts, by = 'b') %>%
+  mutate(mostlyTopic = if_else(topic1 > topic2 & topic1 > topic3, 1, -100),
+         mostlyTopic = if_else(topic2 > topic1 & topic2 > topic3, 2, mostlyTopic),
+         mostlyTopic = if_else(topic3 > topic1 & topic3 > topic2, 3, mostlyTopic),
+         mostlyTopic = if_else(topic1 == topic2 & topic1 > topic3, sample(c(1, 2), size = 1), mostlyTopic),
+         mostlyTopic = if_else(topic1 == topic3 & topic1 > topic2, sample(c(1, 3), size = 1), mostlyTopic),
+         mostlyTopic = if_else(topic2 == topic3 & mostlyTopic == -100, sample(c(2, 3), size = 1), mostlyTopic)) %>%
+  group_by(txtMsgNum) %>%
+  add_count(name = "n_bitermsInTxt") %>%
+  group_by(txtMsgNum, txtID, n_bitermsInTxt) %>%
+  count(mostlyTopic) %>%
+  pivot_wider(id_cols = c("txtMsgNum", "txtID", "n_bitermsInTxt"), names_from = mostlyTopic, values_from = n, names_prefix = "topic") %>%
+  replace_na(list(topic1 = 0, topic2 = 0, topic3 = 0)) %>%
+  mutate(topic1 = topic1/n_bitermsInTxt,
+         topic2 = topic2/n_bitermsInTxt,
+         topic3 = topic3/n_bitermsInTxt) %>%
+  mutate(mostlyTopic = if_else(topic1 > topic2 & topic1 > topic3, 1, -100),
+         mostlyTopic = if_else(topic2 > topic1 & topic2 > topic3, 2, mostlyTopic),
+         mostlyTopic = if_else(topic3 > topic1 & topic3 > topic2, 3, mostlyTopic),
+         mostlyTopic = if_else(topic1 == topic2 & topic1 > topic3, sample(c(1, 2), size = 1), mostlyTopic),
+         mostlyTopic = if_else(topic1 == topic3 & topic1 > topic2, sample(c(1, 3), size = 1), mostlyTopic),
+         mostlyTopic = if_else(topic2 == topic3 & mostlyTopic == -100, sample(c(2, 3), size = 1), mostlyTopic)) 
+  
+  return(txtsAndTopics)
+}
+
+txtsAndTopics1 <-getTxtsAndTopics(topicCounts1, txtBiterm1)
+txtsAndTopics1 %>%
+  ungroup() %>%
+  mutate(Atopic = if_else(str_starts(txtID, "A"), "A", "Not A")) %>%
+  mutate(mostlyTopic = as.character(mostlyTopic)) %>%
+  ggplot(aes(x = Atopic, fill = mostlyTopic)) +
+  geom_bar(aes(fill = mostlyTopic))
+```
+
+Experiement 7 version 1
+
+  * K = 3
+  * L = 200
+  * burn = 50
+  * A texts ~ N(5, 1), all others ~ N(0, 1)
+  
+```{r}
+topicCounts2 <- read_csv("Exper7v2/bitermTopicCount.csv")
+txtBiterm2 <- read_csv("Exper7v2/txtBiterm_df.csv")
+
+txtsAndTopics2 <-getTxtsAndTopics(topicCounts2, txtBiterm2)
+txtsAndTopics2 %>%
+  ungroup() %>%
+  mutate(Atopic = if_else(str_starts(txtID, "A"), "A", "Not A")) %>%
+  mutate(mostlyTopic = as.character(mostlyTopic)) %>%
+  ggplot(aes(x = Atopic, fill = mostlyTopic)) +
+  geom_bar(aes(fill = mostlyTopic))
+```

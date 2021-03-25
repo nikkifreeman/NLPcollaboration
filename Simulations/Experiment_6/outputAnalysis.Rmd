@@ -1,0 +1,51 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(tidyverse)
+library(philentropy)
+
+latent <- read_csv("twoDimNoSup.csv")
+texts <- readxl::read_xlsx("../../../Reback_TxtLibrary/Reback_Project Tech Support Text Message Library.xlsx", 
+                           skip = 23, 
+                           sheet = "Library", 
+                           col_names = c("msgID", "text"))
+msgEmbed <- read_csv("msgEmbeddings.csv")
+
+dim(msgEmbed)
+dim(latent)
+texts <- texts %>% drop_na() %>%
+  separate(msgID, into = c("label", "number"), sep = 1)
+
+names(msgEmbed) <- paste0("V", names(msgEmbed))
+
+df <- texts %>% bind_cols(msgEmbed) %>%
+  select(-VX1) 
+df$closest <- -1
+df$dist <- 0
+
+for(i in 1:dim(df)[1]){
+  sentVec <- df %>% 
+    slice(i) %>% 
+    select(V0:V767) %>%
+    unlist() %>%
+    as.vector()
+  d0 <- distance(rbind(sentVec, latent$`0`), "harmonic_mean")
+  d1 <- distance(rbind(sentVec, latent$`1`), "harmonic_mean")
+  df$closest[i] <- if_else(d0<d1, 0, 1)
+  df$dist[i] <- if_else(d0<d1, d0, d1)
+}
+
+df %>% select(label, text, closest) %>%
+  group_by(label) %>%
+  count(closest) %>%
+  pivot_wider(id_cols = label, names_from = closest, values_from = n)
+
+df %>% group_by(closest) %>%
+  filter(dist == min(dist))
+df %>% select(label, number, text, closest)
+texts %>% group_by(label) %>% count()
+```
+
